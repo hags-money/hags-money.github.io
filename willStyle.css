@@ -1,0 +1,141 @@
+
+body {
+  font-family: Consolas, "courier new";
+  margin: 0;
+  padding: 0;
+  min-height: 100vh;
+  display: flex;
+  flex-direction: column;
+}
+
+header {
+  background-color: rgb(10, 46, 10);
+  color: #fff;
+  padding: 20px;
+  text-align: center;
+}
+
+nav {
+  background-color: rgb(10, 46, 10);
+  color: #fff;
+  padding: 10px;
+  text-align: center;
+}
+
+ul {
+  list-style-type: none;
+  margin: 0;
+  padding: 0;
+}
+
+li {
+  display: inline-block;
+  margin-right: 10px;
+}
+
+.GFG {
+  background-color: white;
+  border: 2px solid rgb(10, 46, 10);
+  color: rgb(10, 46, 10);
+  padding: 5px 10px;
+  text-align: center;
+  display: inline-block;
+  font-size: 20px;
+  margin: 10px 30px;
+  cursor: pointer;
+  border-radius: 12px;
+  transition-duration: 0.5s;
+  font-family: Consolas, "courier new";
+}
+
+.GFG:hover {
+  background-color: rgb(10, 46, 10);
+  color: white;
+}
+
+h1 {
+  margin: 0;
+}
+
+main {
+  padding: 20px;
+}
+
+footer {
+  background-color: #333;
+  color: #fff;
+  padding: 10px;
+  text-align: center;
+  margin-top: auto;
+}
+
+div.gallery {
+  margin: 10px;
+  margin-left: auto;
+  margin-right: auto;
+  border: 1px solid #ccc;
+  float: center;
+  width: 360px;
+}
+
+div.gallery:hover {
+  border: 1px solid #777;
+}
+
+div.gallery img {
+  width: 100%;
+  height: auto;
+}
+
+div.desc {
+  padding: 15px;
+  text-align: center;
+}
+
+div.experience {
+  margin: 10px;
+  border: 1px solid #ccc;
+  float: center;
+  height: 270px;
+  width: 1620px;
+}
+
+div.experience:hover {
+  border: 1px solid #777;
+}
+
+div.block {
+  float: center;
+}
+
+p.date {
+  text-align: left;
+  color: #777;
+  margin: 5px;
+}
+
+img.logo {
+  float: right;
+  position: relative;
+  top: -50px;
+}
+
+p.classes {
+  text-align: center;
+  text-shadow: 2px 2px 4px #000000;
+}
+
+.proj {
+  background-color: rgb(10, 46, 10);
+  border: 2px solid rgb(10, 46, 10);
+  color: white;
+  padding: 5px 10px;
+  cursor: pointer;
+  border-radius: 12px;
+  transition-duration: 0.5s;
+  font-family: Consolas, "courier new";
+}
+
+.proj:hover {
+  border: 1px solid #777;
+}

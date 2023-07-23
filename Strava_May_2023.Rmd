@@ -1,0 +1,311 @@
+---
+title: "Strava Analysis"
+author: "Will Hagedorn"
+date: "Nov 2021 - July 2023"
+output: html_document
+---
+
+
+>This analysis focuses on my running progression from November 2021 to July 2023. I ran cross country and track in highschool, and graduated in May 2022. I was, as you will soon see, not fast enough to run for the varsity track or cross country teams at my chosen University: UW Madison. Despite this, I continued to run while in college, opting to train for longer races. As a result of this, and actually experiences all of the runs that act as data points, I expect this analysis to show my mileage increase but speed decrease over time. 
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE, message = FALSE,
+                      warning = FALSE, error = TRUE,
+                      fig.height = 3)
+library(tidyverse)
+library(kableExtra)
+library(lubridate)
+library(modelr)
+source("scripts/viridis.R")
+source("scripts/ggprob.R")
+
+theme_set(theme_minimal())
+```
+
+## Data Read in and Manipulation
+>The data is sourced from my Strava profile. Each data point is a single run that I personally performed and recorded on a Garmin Watch (These watches are generally accepted as being accurate for distance and time). Each data point contains numerous variables; the variables I am selecting for analysis are the run's date, name, distance, time, average speed, and calories burned.
+>After reading in the data, I had to filter any non-run activities (bike rides would make me look really fast), and I then converted the distance and speed variables to be using imperical units. Finally, I renamed the kept variables for simplicity sake.
+
+```{r, echo=FALSE}
+activities = read.csv("Data/activities.csv")
+
+activities = activities %>% 
+  mutate(Distance = as.numeric(Distance)) %>% 
+  mutate(Distance = Distance * 0.62) %>%
+  mutate(Average.Speed = Average.Speed / 0.62, Elapsed.Time = Elapsed.Time / 60) %>% 
+  select(Activity.Date, Activity.Name, Activity.Type, Distance, Elapsed.Time, Average.Speed, Calories)
+
+actRun = activities %>% 
+  filter(Activity.Type == "Run")
+```
+
+>My next step was to parse the Activity.Date variable to add two new columns being year and month. This will allow me to analyze the average values of variables like distance, speed, and time over the course of multiple months and years.
+>The table below shows the average distance, total distance, and total calories burned by month and year for my runs.
+
+```{r, echo=FALSE}
+actRun2 = actRun %>% 
+  mutate(date = mdy_hms(Activity.Date),
+         year = year(date),
+         month = month(date, label = TRUE),
+         date2 = as.Date(date))
+
+actRun2 %>% 
+  group_by(year, month) %>% 
+  drop_na() %>% 
+  mutate(month = month(date, label = TRUE)) %>% 
+  summarise(avg_distance = mean(Distance),
+            total_distance = sum(Distance),
+            total_calories = sum(Calories)) %>% 
+  kbl() %>%
+  kable_styling()
+```
+
+>Initially, based on the table, it is clear that my total and average distance has increased quite dramatically since November 2021. The comparatively lower mileage in the winter months (December-March) is due to the fact that I am primarily cross-country skiing during those months, leading to less running mileage.
+
+## Average Speed by Month
+>First I will look to see how my monthly average speed for runs has changed from November 2021 to July 2023. A scatterplot of average speed vs month and year is shown below.
+
+```{r, echo=FALSE}
+actRun3 = actRun2 %>% 
+  group_by(year, month) %>% 
+  summarise(avg_speed = mean(Average.Speed)) %>% 
+  mutate(month_num = as.numeric(month),
+         month_num = case_when(
+    year == 2021 ~ (month_num - 11),
+    year == 2022 ~ (month_num - 11 + 12),
+    year == 2023 ~ (month_num - 11 + 24)
+  ))
+
+ggplot(actRun3, aes(x = month_num, y = avg_speed, color = avg_speed)) +
+  geom_point() +
+  geom_smooth(method = lm, se = FALSE) +
+  xlab("Month") + ylab("Average Speed per Run") +
+  ggtitle("Average Run Speed by Month",
+          subtitle = "Nov 2021 - Jul 2023") +
+  scale_x_discrete(limits = c("Nov21", "Dec21", "Feb22", "Mar22", "Apr22", "May22",
+                              "Jun22", "Jul22", "Aug22", "Sep22", "Oct22", "Nov22",
+                              "Dec22", "Jan23", "Feb23", "Mar23", "Apr23", "May23",
+                              "Jun23", "Jul23")) +
+  theme(axis.text.x = element_text(angle=90, vjust=.5, hjust=1))
+```
+
+>The trend shown by the line of best fit appears to show a slight increase in speed over time, however the line doesnt serve as good evidence of this as it's not very steep. A few outliers immediatley become apparent; with Dec 2021 being particularily slow, and April and May of 2022 being particularily fast.
+>Investigating these months yields the following:
+
+
+```{r, echo=FALSE}
+actRun2 %>% 
+  filter(year == 2021, month == "Dec") %>% 
+  select(year, month, Average.Speed) %>% 
+  arrange(Average.Speed) %>% 
+  kbl() %>%
+  kable_styling()
+
+actRun2 %>% 
+  filter(year == 2022, month == "Apr") %>% 
+  select(year, month, Average.Speed) %>% 
+  arrange(-Average.Speed) %>% 
+  slice_head(n = 10) %>%
+  kbl() %>%
+  kable_styling()
+
+actRun2 %>% 
+  filter(year == 2022, month == "May") %>%
+  select(year, month, Average.Speed) %>% 
+  arrange(-Average.Speed) %>% 
+  slice_head(n = 10) %>% 
+  kbl() %>%
+  kable_styling()
+
+```
+>Looking at December 2021, it can be seen why the average speed is so low. There are only 6 runs in total, and all of them were easy runs (one being particularily slow). Without any faster workouts to contribute to the average speed, it falls well below that of other months.
+>Looking at the 10 fastest runs of April and May of 2022 depicts why their average speeds were so high. It becomes clear that a few runs in each month had abnormally high average speeds. This can be attributed to those months being the heart of my senior track season, meaning these high speed runs were races. The two fastest were likely 400 meter races, much shorter and faster than my average runs.
+>Because these races are not typical runs, and all of my runs are weighted the same regardless of their length, I will filter out these very short races to gain a more accurate picture of my running speeds overtime. I am making the threshold 9 miles per hour, as the only time I would run faster than this for more than a few intervals is in a race.
+
+```{r, echo=FALSE}
+actRun4 = actRun2 %>% 
+  filter(Average.Speed < 9)
+
+actRun3 = actRun4 %>% 
+  group_by(year, month) %>% 
+  summarise(avg_speed = mean(Average.Speed)) %>% 
+  mutate(month_num = as.numeric(month),
+         month_num = case_when(
+    year == 2021 ~ (month_num - 11),
+    year == 2022 ~ (month_num - 11 + 12),
+    year == 2023 ~ (month_num - 11 + 24)
+  ))
+
+ggplot(actRun3, aes(x = month_num, y = avg_speed, color = avg_speed)) +
+  geom_point() +
+  geom_smooth(method = lm, se = FALSE) +
+  xlab("Month") + ylab("Average Speed per Run") +
+  ggtitle("Average Run Speed by Month",
+          subtitle = "Nov 2021 - Jul 2023") +
+  scale_x_discrete(limits = c("Nov21", "Dec21", "Feb22", "Mar22", "Apr22", "May22",
+                              "Jun22", "Jul22", "Aug22", "Sep22", "Oct22", "Nov22",
+                              "Dec22", "Jan23", "Feb23", "Mar23", "Apr23", "May23",
+                              "Jun23", "Jul23")) +
+  theme(axis.text.x = element_text(angle=90, vjust=.5, hjust=1))
+```
+
+>As can be seen, the relationship between month and average speed appears to be stronger after accounting for the few track races.
+
+> A linear model for average speed by month is:
+
+```{r, echo=FALSE}
+#Calculations
+x = actRun3$month_num
+y = actRun3$avg_speed
+
+xbar = mean(x)
+ybar = mean(y)
+sx = sd(x)
+sy = sd(y)
+r = cor(x,y)
+
+b1 = r *sy/sx
+b0 = ybar - b1*xbar
+
+#Checking Calculations with lm()
+df_lm = lm(avg_speed ~ month_num, data = actRun3)
+cf = coef(df_lm)
+```
+$Average Speed = 5.208 + (0.015)*(Number of Months)$
+
+>Using a linear regression model yields a failry weak positive linear relationship between the variables. To further analyze the relationship between the variables, I created the residual plot below.
+
+```{r,echo=FALSE}
+df0 = tibble(x=x, y=y)
+lm0 = lm(y~x, df0)
+
+df0 = df0 %>%
+  add_residuals(lm0) %>%
+  add_predictions(lm0)
+
+ggplot(df0, aes(x=x, y =resid)) +
+  geom_point() +
+  xlab("Month Number (since Nov 2021)") +
+  ylab("Residuals") +
+  geom_hline(aes(yintercept=0), color="red", linetype = "dashed") +
+  geom_smooth(se=FALSE, color="magenta") +
+  ggtitle("Residuals of Months (since Nov 2021) and Average Monthly Speed")
+```
+
+>There is no clear relationship between the residuals, indicating that the residuals follow an approximately normal distribution, and that a linear model is appropriate.
+>I'll next conduct a hypothesis test to determine whether there is enough evidence to conclude there is no relationship (slope = 0) between the average speed of my runs and days since my first Strava run.
+
+$$
+H_0: \theta = 0 \\
+H_a: \theta \neq 0 \\
+Where\ \theta\ is\ the\ slope
+$$
+
+```{r, echo=FALSE}
+summary(lm0)
+
+tstat = (b1 - 0) / (0.008115)
+  
+pvalue = (1 - pt(tstat, 18))*2
+round(pvalue, 4)
+```
+
+>The summary yields an estimated slope of 0.0151 as found previously, and a standard error estimated at 0.0081 The final p-value is found to be 0.08
+
+>As a result of the hypothesis test, there is not strong enough evidence (p = 0.08, two sided t-test, df = 8) to conclude that the slope of linear regression model is not 0. This means that there is not significant evidence of a linear relationship between my average monthly speed and the number of months since November 2021.
+
+###Distance Overtime
+
+>If questions relating to speed fail to yield any information of signifigance, the next course of action for any runner is to analyze the change in distance overtime. Runners often judge mileage as weekly total, so I will comparing the total miles per week from November of 2021 to July 0f 2023.
+
+```{r, echo = FALSE}
+actDist = actRun2 %>% 
+  mutate(week_num = as.numeric(strftime(date2, format = "%V")),
+         week_num = case_when(
+    year == 2021 ~ (week_num - 45),
+    year == 2022 ~ (week_num - 45 + 52),
+    year == 2023 ~ (week_num - 45 + 104)
+  ))  %>% 
+  group_by(year, week_num) %>% 
+  summarise(total_dist = sum(Distance))
+
+ggplot(actDist, aes(x = week_num, y = total_dist)) +
+  geom_point() +
+  geom_smooth(method = lm, se = FALSE) +
+  xlab("Week Number (In number of weeks since first Strava post)") +
+  ylab("Total Distance (miles)") +
+  ggtitle("Total Weekly Distance", 
+          subtitle = "Nov 2021 - Jul 2023")
+```
+
+>This time a fairly strong positve relationship can be seen between the week number and the number of miles run in that week. This necessitates a hypothesis test to determine if there is a significant increase in the number of weekly miles I have run over time.
+
+```{r, echo = FALSE}
+#Calculations
+x = actDist$week_num
+y = actDist$total_dist
+
+xbar = mean(x)
+ybar = mean(y)
+sx = sd(x)
+sy = sd(y)
+r = cor(x,y)
+
+b1 = r *sy/sx
+b0 = ybar - b1*xbar
+
+#Checking Calculations with lm()
+df_lm = lm(total_dist ~ week_num, data = actDist)
+cf = coef(df_lm)
+```
+
+$TotalDistance = 11.730 + (0.412)*(WeekNumber)$
+
+>The residual plot below indicates a linear model is appropriate to use, as there is no discernable pattern between the data point.
+
+```{r,echo=FALSE}
+df0 = tibble(x=x, y=y)
+lm0 = lm(y~x, df0)
+
+df0 = df0 %>%
+  add_residuals(lm0) %>%
+  add_predictions(lm0)
+
+ggplot(df0, aes(x=x, y =resid)) +
+  geom_point() +
+  xlab("Week Number") +
+  ylab("Residuals") +
+  geom_hline(aes(yintercept=0), color="red", linetype = "dashed") +
+  geom_smooth(se=FALSE, color="magenta") +
+  ggtitle("Residuals of Week Number and Total Distance")
+```
+
+$$
+H_0: \theta = 0 \\
+H_a: \theta > 0 \\
+Where\ \theta\ is\ the\ slope
+$$
+
+```{r, echo=FALSE}
+summary(lm0)
+
+tstat = (b1 - 0) / (0.06342)
+  
+pvalue = 1 - pt(tstat, 75)
+pvalue
+```
+
+>The summary yields an estimated slope of 0.412 as found previously, and a standard error estimated at 0.06342 The final p-value is found to be 3.99e-09.
+
+>As a result of the hypothesis test, there is strong enough evidence (p = 3.99e-09, one sided t-test, df = 75) to conclude that the slope of linear regression model is greater than 0. This means that there is significant evidence of a positive relationship between my total weekly miles and the number of weeks since my first Strava post.
+
+### Results
+
+>The results of each test were not entirely suprising to me. My experience performing my own runs certainly supported the conclusions I came to. My speed for easy runs has stayed relatively constant since I started recording runs on Strava. That being said, I would guess my speed for races of distances 5000 meters and shorter has decreased. Further analysis would be needed to confirm this, however the significant decrease in speed work I have done since High School supports this hypothesis. For me to be certain of this, would require me to run a few races 5000 meters and shorter now to then compare to the races at those distances I ran in late 2021 and early 2022.
+
+>Additionally, I was fairly confident I would see a significant difference in my average weekly mileage overtime, because I have made an active effort to run more miles since High School. Further analysis could be conducted to determine what types of runs (Longer long runs or longer extraneous runs) this extra distance is coming from.
+
+### Final Notes
+>It may seem like an obvious avenue of analysis is comparing speed and distance of individual runs to see if I run slower as runs get longer. This analysis, however, wouldnt work properly. That's because most of my runs are at an easy pace (general recommendations are 80% easy). Regardless of the length of my easy run, the pace will remain relatively consistent due to the nature of an easy pace. This means the relationship between speed and distance would be largley meaningless for a vast majority of my runs. For example, I've had 18 miles runs that were the same pace as 3 miles runs. Despite these runss being drastically different in distance, the function of running at an easy pace remains the same.
+
+>Additionally, questions relating to caloric burn seem appropriate for analysis. However, Garmin watches calculate an estimated calorie burn using the activity type, distance, duration, and the users heart rate. Garmin watches are notoriously poor at recording a heart rate. Because it attempts to judge heart rate at the user's wrist, arm motion, sweat, and the tightness of the watch's fit can all skew to recorded heart rate of a Garmin watch. As a result the estimated caloric burn for many of my runs is likely inaccurate, making analysis based on this data inappropriate. 
